@@ -377,12 +377,29 @@ libc_common_src_files += \
 	arch-arm/bionic/tgkill.S \
 	arch-arm/bionic/memcmp.S \
 	arch-arm/bionic/memcmp16.S \
+	arch-arm/bionic/memset.S \
 	arch-arm/bionic/setjmp.S \
 	arch-arm/bionic/sigsetjmp.S \
 	arch-arm/bionic/strcmp.S \
 	arch-arm/bionic/syscall.S \
 	string/strncmp.c \
 	unistd/socketcalls.c
+
+# Use newer method by default for ARM devices unless older method of memcpy is opt-in
+ifeq ($(TARGET_ARCH),arm)
+  ifneq ($(USE_OLD_MEMCPY),true)
+  libc_common_src_files += \
+	  arch-arm/bionic/memcpy.S
+  endif
+
+  # If older method of memcpy is opt-in but no ARMV7A, use the newer method of memcpy either way
+  ifeq ($(USE_OLD_MEMCPY),true)
+    ifneq ($(ARCH_ARM_HAVE_ARMV7A),true)
+    libc_common_src_files += \
+	    arch-arm/bionic/memcpy.S
+    endif
+  endif
+endif
 
 # Check if we want a neonized version of memmove instead of the
 # current ARM version
@@ -391,7 +408,7 @@ libc_common_src_files += \
 	arch-arm/bionic/memmove.S \
 	bionic/memmove_words.c
 else
-ifneq (, $(filter true,$(TARGET_USE_KRAIT_BIONIC_OPTIMIZATION) $(TARGET_USE_SPARROW_BIONIC_OPTIMIZATION)))
+ifeq ($(ARCH_ARM_HAVE_ARMV7A),true)
  libc_common_src_files += \
 	arch-arm/bionic/memmove.S
  else # Other ARM
@@ -434,40 +451,34 @@ libc_arch_static_src_files := \
 libc_arch_dynamic_src_files := \
 	arch-arm/bionic/exidx_dynamic.c
 
-# linaro optimized string routines are opt-in	
-TARGET_USE_LINARO_STRING_ROUTINES ?= false
-TARGET_USE_LINARO_MEMCPY ?= false
-
-#MemCPY breaks camera on gnex //TODO debug
-ifeq ($(TARGET_USE_LINARO_MEMCPY)-$(ARCH_ARM_HAVE_ARMV7A),true-true)
-libc_common_src_files += \
-	arch-arm/bionic/armv7/memcpy.S  
-else 
-libc_common_src_files += \
-	arch-arm/bionic/memcpy.S 
-endif
-#We can only use linaro optimizations on Arm-v7a
-ifeq ($(TARGET_USE_LINARO_STRING_ROUTINES)-$(ARCH_ARM_HAVE_ARMV7A),true-true)
-libc_common_src_files += \
-    arch-arm/bionic/armv7/bzero.S \
-	arch-arm/bionic/armv7/memchr.S \
-	arch-arm/bionic/armv7/memset.S \
-	arch-arm/bionic/armv7/strchr.S \
-	arch-arm/bionic/armv7/strcpy.c \
-	arch-arm/bionic/armv7/strlen.S
+ifeq ($(ARCH_ARM_HAVE_ARMV7A),true)
+  ifneq ($(IS_ARMV7A_QCOM),true)
+  libc_common_src_files += \
+	  arch-arm/bionic/armv7/memchr.S \
+	  arch-arm/bionic/armv7/strchr.S \
+	  arch-arm/bionic/armv7/strcpy.c \
+	  arch-arm/bionic/armv7/strlen.S
+  endif
 else
 libc_common_src_files += \
 	string/memchr.c \
-	arch-arm/bionic/memset.S \
 	string/strchr.c \
 	arch-arm/bionic/strcpy.S \
 	arch-arm/bionic/strlen.c.arm
 endif
 
-ifeq ($(ARCH_ARM_HAVE_ARMV7A),true)	
-    libc_common_cflags += -DNEON_UNALIGNED_ACCESS -DNEON_MEMCPY_ALIGNMENT_DIVIDER=224	
+# Don't use linaro string routines on QCOM chipsets
+ifeq ($(ARCH_ARM_HAVE_ARMV7A)-$(IS_ARMV7A_QCOM),true-true)
+libc_common_src_files += \
+	string/memchr.c \
+	string/strchr.c \
+	arch-arm/bionic/strcpy.S \
+	arch-arm/bionic/strlen.c.arm
 endif
-
+ifeq ($(ARCH_ARM_HAVE_ARMV7A)-$(USE_OLD_MEMCPY),true-true)
+libc_common_src_files += \
+	arch-arm/bionic/armv7/memcpy.S
+endif
 else # arm
 
 libc_common_src_files += \
@@ -537,6 +548,9 @@ libc_common_src_files += \
 	arch-mips/string/memset.S \
 	arch-mips/string/memcpy.S \
 	arch-mips/string/mips_strlen.c
+
+libc_common_src_files += \
+	bionic/memmove_words.c
 
 libc_common_src_files += \
 	string/bcopy.c \
@@ -618,6 +632,9 @@ ifeq ($(TARGET_ARCH),arm)
   ifeq ($(ARCH_ARM_USE_NON_NEON_MEMCPY),true)
     libc_common_cflags += -DARCH_ARM_USE_NON_NEON_MEMCPY
   endif
+  ifeq ($(ARCH_ARM_HAVE_ARMV7A),true)
+    libc_common_cflags += -DNEON_UNALIGNED_ACCESS -DNEON_MEMCPY_ALIGNMENT_DIVIDER=224
+  endif
 
   # Add in defines to activate SCORPION_NEON_OPTIMIZATION
   ifeq ($(TARGET_USE_SCORPION_BIONIC_OPTIMIZATION),true)
@@ -645,6 +662,9 @@ ifeq ($(TARGET_ARCH),arm)
   endif
   ifeq ($(TARGET_CORTEX_CACHE_LINE_32),true)
     libc_common_cflags += -DCORTEX_CACHE_LINE_32
+  endif
+  ifeq ($(ARCH_ARM_HAVE_ARMV7A),true)
+    libc_common_cflags += -DNEON_UNALIGNED_ACCESS -DNEON_MEMSET_DIVIDER=132
   endif
 else # !arm
   ifeq ($(TARGET_ARCH),x86)

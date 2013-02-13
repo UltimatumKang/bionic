@@ -162,26 +162,18 @@ ifeq ($(TARGET_ARCH),arm)
 
   ifeq ($(TARGET_USE_KRAIT_BIONIC_OPTIMIZATION),true)
     libm_common_src_files += \
-	  arm/e_pow.S \
 	  arm/s_cos.S \
 	  arm/s_sin.S
     libm_common_cflags += -DKRAIT_NEON_OPTIMIZATION -fno-if-conversion
   else
     libm_common_src_files += \
 	  src/s_cos.c \
-      src/s_sin.c
+	  src/s_sin.c
   endif
 
-  ifeq ($(TARGET_USE_SPARROW_BIONIC_OPTIMIZATION),true)
+  ifeq ($(ARCH_ARM_HAVE_ARMV7A),true)
     libm_common_src_files += \
           arm/e_pow.S
-    libm_common_cflags += -DSPARROW_NEON_OPTIMIZATION
-  endif
-
-  ifeq ($(TARGET_USE_SCORPION_BIONIC_OPTIMIZATION),true)
-    libm_common_src_files += \
-          arm/e_pow.S
-    libm_common_cflags += -DSCORPION_NEON_OPTIMIZATION
   endif
 
   libm_common_includes = $(LOCAL_PATH)/arm
@@ -204,7 +196,9 @@ ifeq ($(TARGET_ARCH),mips)
 	src/s_scalbln.c \
 	src/s_scalbn.c \
 	src/s_scalbnf.c \
-	src/e_sqrtf.c
+	src/e_sqrtf.c \
+	src/s_sin.c \
+	src/s_cos.c
 
   libm_common_includes = $(LOCAL_PATH)/mips
   # Need to build *rint* functions
